@@ -31,6 +31,7 @@ export default function Home() {
   const [mindmap, setMindmap] = useState('');
   const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
   const [videoLoading, setVideoLoading] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const extractVideoId = (url: string): { videoId: string; platform: string } | null => {
@@ -130,20 +131,23 @@ export default function Home() {
         summary: data.summary,
       });
 
-      // Fetch video URL (for HD playback)
+      // Check if video is already downloaded
       setVideoLoading(true);
       try {
-        const videoUrlResponse = await fetch(`/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}`);
-        const videoUrlData = await videoUrlResponse.json();
-        if (videoUrlData.success && videoUrlData.url) {
+        const statusResponse = await fetch(`/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}&action=status`);
+        const statusData = await statusResponse.json();
+        if (statusData.status === 'ready') {
+          setDownloadStatus('ready');
           setResult(prev => prev ? {
             ...prev,
-            videoUrl: videoUrlData.url,
-            videoType: videoUrlData.type,
+            videoUrl: `/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}&action=stream`,
+            videoType: 'direct',
           } : null);
+        } else {
+          setDownloadStatus('idle');
         }
       } catch (err) {
-        console.log('Could not fetch HD video URL:', err);
+        console.log('Could not check download status:', err);
       } finally {
         setVideoLoading(false);
       }
@@ -160,6 +164,46 @@ export default function Home() {
     setResult(null);
     setChatMessages([]);
     setMindmap('');
+    setDownloadStatus('idle');
+  };
+
+  const handleDownloadHD = async () => {
+    if (!result) return;
+
+    setDownloadStatus('downloading');
+    try {
+      const response = await fetch(
+        `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=download&quality=${quality}`
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        // Poll for download status
+        const pollInterval = setInterval(async () => {
+          const statusResponse = await fetch(
+            `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=status`
+          );
+          const statusData = await statusResponse.json();
+
+          if (statusData.status === 'ready') {
+            clearInterval(pollInterval);
+            setDownloadStatus('ready');
+            setResult(prev => prev ? {
+              ...prev,
+              videoUrl: `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=stream`,
+              videoType: 'direct',
+            } : null);
+          } else if (statusData.status === 'not_found') {
+            // Still downloading, keep waiting
+          }
+        }, 5000);
+      } else {
+        setDownloadStatus('error');
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      setDownloadStatus('error');
+    }
   };
 
   const handleSendMessage = async () => {
@@ -321,6 +365,15 @@ export default function Home() {
                     <option value="480">480P</option>
                   </select>
                 </div>
+                {downloadStatus === 'ready' ? (
+                  <span className="download-ready">✅ 已下载</span>
+                ) : downloadStatus === 'downloading' ? (
+                  <span className="download-loading">⏬ 下载中...</span>
+                ) : (
+                  <button className="download-btn" onClick={handleDownloadHD}>
+                    ⬇ 下载高清
+                  </button>
+                )}
                 <a
                   href={result.platform === 'youtube'
                     ? `https://www.youtube.com/watch?v=${result.videoId}`
@@ -331,7 +384,7 @@ export default function Home() {
                   className="open-original-btn"
                   style={{ background: '#FB7299', color: 'white', border: '1px solid #FB7299' }}
                 >
-                  🎬 高清模式
+                  🎬 原站
                 </a>
               </div>
             </div>
@@ -630,6 +683,37 @@ export default function Home() {
           flex-direction: column;
           align-items: center;
           gap: 0.5rem;
+        }
+
+        .download-btn {
+          background: #10b981;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        .download-btn:hover {
+          background: #059669;
+        }
+
+        .download-ready {
+          background: #10b981;
+          color: white;
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
+        }
+
+        .download-loading {
+          background: #f59e0b;
+          color: white;
+          border-radius: 6px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
         }
 
         .open-original-btn {
