@@ -9,6 +9,8 @@ interface VideoResult {
   language: string;
   subtitles: { text: string; start: number; duration: number }[];
   summary: string;
+  videoUrl?: string;
+  videoType?: 'iframe' | 'direct';
 }
 
 interface ChatMessage {
@@ -28,6 +30,7 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [mindmap, setMindmap] = useState('');
   const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
+  const [videoLoading, setVideoLoading] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const extractVideoId = (url: string): { videoId: string; platform: string } | null => {
@@ -126,6 +129,24 @@ export default function Home() {
         subtitles,
         summary: data.summary,
       });
+
+      // Fetch video URL (for HD playback)
+      setVideoLoading(true);
+      try {
+        const videoUrlResponse = await fetch(`/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}`);
+        const videoUrlData = await videoUrlResponse.json();
+        if (videoUrlData.success && videoUrlData.url) {
+          setResult(prev => prev ? {
+            ...prev,
+            videoUrl: videoUrlData.url,
+            videoType: videoUrlData.type,
+          } : null);
+        }
+      } catch (err) {
+        console.log('Could not fetch HD video URL:', err);
+      } finally {
+        setVideoLoading(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '处理失败，请重试');
     } finally {
@@ -260,13 +281,32 @@ export default function Home() {
           {/* Left Column: Video + Transcript */}
           <div className="left-column">
             <div className="video-container">
-              <iframe
-                src={getEmbedUrl(result.url, result.platform, result.videoId)}
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                title="Video Player"
-              />
+              {result.videoType === 'direct' && result.videoUrl ? (
+                <>
+                  <video
+                    controls
+                    autoPlay={false}
+                    className="html5-video"
+                  >
+                    <source src={result.videoUrl} type="video/mp4" />
+                    您的浏览器不支持 HTML5 视频播放
+                  </video>
+                  {videoLoading && (
+                    <div className="video-loading">
+                      <div className="spinner"></div>
+                      <span>加载高清视频中...</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <iframe
+                  src={getEmbedUrl(result.url, result.platform, result.videoId)}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title="Video Player"
+                />
+              )}
               <div className="video-controls">
                 <div className="quality-selector">
                   <span>清晰度:</span>
@@ -567,6 +607,29 @@ export default function Home() {
           left: 0;
           width: 100%;
           height: 100%;
+        }
+
+        .video-container .html5-video {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+        }
+
+        .video-loading {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(0, 0, 0, 0.8);
+          padding: 1rem 1.5rem;
+          border-radius: 8px;
+          color: white;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
         }
 
         .open-original-btn {
