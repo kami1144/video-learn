@@ -61,10 +61,10 @@ async function tryYouTubeInternalSubtitles(videoId: string): Promise<Subtitle[]>
     const html = await response.text();
 
     // Try to extract captions from HTML (player config)
-    const captionsMatch = html.match(/"captionTracks":\[(.*?)\]/s);
-    if (!captionsMatch) return [];
+    const captionMatch = extractJsonFromHtml(html, 'captionTracks');
+    if (!captionMatch) return [];
 
-    const captionTracks = JSON.parse(`[${captionsMatch[1]}]`);
+    const captionTracks = JSON.parse(`[${captionMatch}]`);
     if (!captionTracks || captionTracks.length === 0) return [];
 
     // Find auto-generated or preferred subtitle
@@ -116,4 +116,12 @@ function parseSubtitlesXml(xml: string): Subtitle[] {
   }
 
   return subtitles;
+}
+
+// Helper function to extract JSON array from HTML
+function extractJsonFromHtml(html: string, key: string): string | null {
+  // Find the key followed by array brackets
+  const regex = new RegExp(`"${key}":\\[(.*?)\\]`, '');
+  const match = html.match(regex);
+  return match ? match[1] : null;
 }
