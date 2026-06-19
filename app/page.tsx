@@ -24,12 +24,12 @@ export default function Home() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<VideoResult | null>(null);
   const [showInput, setShowInput] = useState(true);
-  const [quality, setQuality] = useState<'auto' | '1080' | '720' | '480'>('auto');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [mindmap, setMindmap] = useState('');
   const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
+  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const extractVideoId = (url: string): { videoId: string; platform: string } | null => {
@@ -52,20 +52,6 @@ export default function Home() {
     }
 
     return null;
-  };
-
-  const getEmbedUrl = (url: string, platform: string, videoId: string): string => {
-    if (platform === 'youtube') {
-      // YouTube quality params: quality=hd720, hd1080, etc.
-      const qualityParam = quality === 'auto' ? '' : `&vq=${quality}`;
-      return `https://www.youtube.com/embed/${videoId}?enablejsapi=1${qualityParam}`;
-    } else if (platform === 'bilibili') {
-      // Bilibili quality: 32=360P, 64=480P, 16=720P, 80=1080P
-      const qualityMap: Record<string, string> = { '1080': '80', '720': '16', '480': '64', 'auto': '0' };
-      const qualityParam = quality === 'auto' ? '' : `&quality=${qualityMap[quality] || '0'}`;
-      return `https://player.bilibili.com/player.html?bvid=${videoId}&autoplay=0${qualityParam}`;
-    }
-    return '';
   };
 
   const formatTimestamp = (seconds: number): string => {
@@ -141,14 +127,48 @@ export default function Home() {
     setResult(null);
     setChatMessages([]);
     setMindmap('');
+    setDownloadStatus('idle');
   };
 
   const handleDownload = async () => {
     if (!result) return;
-    window.open(
-      `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=download`,
-      '_blank'
-    );
+
+    setDownloadStatus('downloading');
+    try {
+      const response = await fetch(
+        `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=download`
+      );
+      const data = await response.json();
+
+      if (data.success) {
+        // Poll for download status
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusResponse = await fetch(
+              `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=status`
+            );
+            const statusData = await statusResponse.json();
+
+            if (statusData.status === 'ready') {
+              clearInterval(pollInterval);
+              setDownloadStatus('ready');
+              setResult(prev => prev ? {
+                ...prev,
+                videoUrl: `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=stream`,
+                videoType: 'direct',
+              } : null);
+            }
+          } catch (e) {
+            // Keep polling
+          }
+        }, 3000);
+      } else {
+        setDownloadStatus('error');
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      setDownloadStatus('error');
+    }
   };
 
   const handleSendMessage = async () => {
@@ -281,7 +301,10 @@ export default function Home() {
                 </video>
               ) : (
                 <iframe
-                  src={getEmbedUrl(result.url, result.platform, result.videoId)}
+                  src={result.platform === 'youtube'
+                    ? `https://www.youtube.com/embed/${result.videoId}`
+                    : `https://player.bilibili.com/player.html?bvid=${result.videoId}`
+                  }
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
@@ -289,10 +312,15 @@ export default function Home() {
                 />
               )}
               <div className="video-controls">
-                <button className="download-btn" onClick={handleDownload}>
-                  ⬇ 下载高清
-                </button>
-
+                {downloadStatus === 'ready' ? (
+                  <span className="download-ready">✅ 已下载</span>
+                ) : downloadStatus === 'downloading' ? (
+                  <span className="download-loading">⏬ 下载中...</span>
+                ) : (
+                  <button className="download-btn" onClick={handleDownload}>
+                    ⬇ 下载高清
+                  </button>
+                )}
               </div>
             </div>
 
