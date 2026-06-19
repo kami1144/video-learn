@@ -6,7 +6,8 @@ interface VideoResult {
   platform: string;
   videoId: string;
   url: string;
-  subtitles: { text: string; startTime: number; endTime: number }[];
+  language: string;
+  subtitles: { text: string; start: number; duration: number }[];
   summary: string;
 }
 
@@ -26,14 +27,27 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [mindmap, setMindmap] = useState('');
 
-  const extractVideoId = (url: string): string | null => {
-    const patterns = [
+  const extractVideoId = (url: string): { videoId: string; platform: string } | null => {
+    // YouTube patterns
+    const youtubePatterns = [
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+      /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
     ];
-    for (const pattern of patterns) {
+    for (const pattern of youtubePatterns) {
       const match = url.match(pattern);
-      if (match) return match[1];
+      if (match) return { videoId: match[1], platform: 'youtube' };
     }
+
+    // Bilibili patterns
+    const bilibiliPatterns = [
+      /bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/,
+      /b23\.tv\/([a-zA-Z0-9]+)/,
+    ];
+    for (const pattern of bilibiliPatterns) {
+      const match = url.match(pattern);
+      if (match) return { videoId: match[1], platform: 'bilibili' };
+    }
+
     return null;
   };
 
@@ -44,12 +58,13 @@ export default function Home() {
       return;
     }
 
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      setError('请输入 YouTube 视频链接');
+    const extracted = extractVideoId(url);
+    if (!extracted) {
+      setError('请输入 YouTube 或 Bilibili 视频链接');
       return;
     }
 
+    const { videoId, platform } = extracted;
     setLoading(true);
     setError('');
     setResult(null);
@@ -57,22 +72,25 @@ export default function Home() {
     setMindmap('');
 
     try {
-      // Step 1: Extract subtitles via our API (bypasses CORS)
-      const captionsResponse = await fetch(`/api/captions?videoId=${videoId}&lang=en`);
-      const captionsData = await captionsResponse.json();
+      // Step 1: Fetch subtitles from Supabase (pre-extracted by Hermes)
+      const subtitlesResponse = await fetch(`/api/subtitles?videoId=${encodeURIComponent(videoId)}&platform=${platform}`);
+      const subtitlesData = await subtitlesResponse.json();
 
-      if (!captionsResponse.ok || !captionsData.subtitles || captionsData.subtitles.length === 0) {
-        throw new Error(captionsData.error || 'No subtitles found for this video.');
+      if (!subtitlesResponse.ok || !subtitlesData.subtitles || subtitlesData.subtitles.length === 0) {
+        if (subtitlesData.hint) {
+          throw new Error(subtitlesData.error + '\n\n提示: ' + subtitlesData.hint);
+        }
+        throw new Error(subtitlesData.error || '暂无字幕，请先提取');
       }
 
-      const subtitles = captionsData.subtitles;
-      console.log(`Found ${subtitles.length} subtitle segments`);
+      const subtitles = subtitlesData.subtitles;
+      console.log(`Found ${subtitles.length} subtitle segments from Supabase`);
 
       // Step 2: Send subtitles to API for LLM processing (summary generation)
       const response = await fetch('/api/process-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, videoId, subtitles }),
+        body: JSON.stringify({ url, videoId, platform, subtitles }),
       });
 
       const data = await response.json();
@@ -82,9 +100,10 @@ export default function Home() {
       }
 
       setResult({
-        platform: 'youtube',
-        videoId: data.videoId,
+        platform,
+        videoId,
         url: data.url,
+        language: subtitlesData.language || 'en',
         subtitles,
         summary: data.summary,
       });
@@ -182,14 +201,18 @@ export default function Home() {
           </div>
         </form>
 
-        {error && <div className="error-message" style={{ marginTop: '1rem' }}>{error}</div>}
+        {error && (
+          <div className="error-message" style={{ marginTop: '1rem', whiteSpace: 'pre-wrap' }}>
+            {error}
+          </div>
+        )}
       </div>
 
       {loading && (
         <div className="result-section">
           <div className="loading">
             <div className="spinner"></div>
-            <span>正在提取字幕并生成摘要...</span>
+            <span>正在从数据库读取字幕并生成摘要...</span>
           </div>
         </div>
       )}
@@ -197,7 +220,12 @@ export default function Home() {
       {result && !loading && (
         <div className="result-section">
           <div className="platform-tags">
-            <span className="platform-tag youtube">YouTube</span>
+            <span className={`platform-tag ${result.platform}`}>
+              {result.platform === 'youtube' ? 'YouTube' : 'Bilibili'}
+            </span>
+            <span style={{ marginLeft: '0.5rem', color: '#64748b', fontSize: '0.875rem' }}>
+              语言: {result.language}
+            </span>
           </div>
 
           <div className="tabs">

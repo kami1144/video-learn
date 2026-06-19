@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { detectPlatform, extractVideoId, type Subtitle } from '@/lib/types';
 import { createLLMClient, generateSummary } from '@/lib/llm';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { url, videoId, subtitles } = body;
+    const { url, videoId, platform = 'youtube', subtitles } = body;
 
     if (!url || !videoId) {
       return NextResponse.json(
@@ -14,7 +13,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // subtitles are now extracted client-side and sent here
+    // subtitles are now sent from the frontend (from Supabase)
     if (!subtitles || subtitles.length === 0) {
       return NextResponse.json(
         { error: 'No subtitles found for this video.' },
@@ -22,12 +21,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Detect platform
-    const platform = detectPlatform(url);
-
     console.log(`Processing ${platform} video: ${videoId}, subtitles: ${subtitles.length}`);
 
-    // Generate summary using LLM
+    // Check API key
     const apiKey = process.env.MINIMAX_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -36,6 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate summary using LLM
     const client = createLLMClient();
     const summary = await generateSummary(client, subtitles);
 
@@ -44,7 +41,7 @@ export async function POST(request: NextRequest) {
       platform,
       videoId,
       url,
-      subtitles: subtitles.map((s: Subtitle) => s.text),
+      subtitles: subtitles.map((s: any) => s.text || s),
       summary,
     });
   } catch (error) {
