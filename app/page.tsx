@@ -30,8 +30,6 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [mindmap, setMindmap] = useState('');
   const [activeTab, setActiveTab] = useState<'chat' | 'mindmap'>('chat');
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const extractVideoId = (url: string): { videoId: string; platform: string } | null => {
@@ -130,27 +128,6 @@ export default function Home() {
         subtitles,
         summary: data.summary,
       });
-
-      // Check if video is already downloaded
-      setVideoLoading(true);
-      try {
-        const statusResponse = await fetch(`/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}&action=status`);
-        const statusData = await statusResponse.json();
-        if (statusData.status === 'ready') {
-          setDownloadStatus('ready');
-          setResult(prev => prev ? {
-            ...prev,
-            videoUrl: `/api/video-url?videoId=${encodeURIComponent(videoId)}&platform=${platform}&action=stream`,
-            videoType: 'direct',
-          } : null);
-        } else {
-          setDownloadStatus('idle');
-        }
-      } catch (err) {
-        console.log('Could not check download status:', err);
-      } finally {
-        setVideoLoading(false);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '处理失败，请重试');
     } finally {
@@ -164,46 +141,6 @@ export default function Home() {
     setResult(null);
     setChatMessages([]);
     setMindmap('');
-    setDownloadStatus('idle');
-  };
-
-  const handleDownloadHD = async () => {
-    if (!result) return;
-
-    setDownloadStatus('downloading');
-    try {
-      const response = await fetch(
-        `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=download&quality=${quality}`
-      );
-      const data = await response.json();
-
-      if (data.success) {
-        // Poll for download status
-        const pollInterval = setInterval(async () => {
-          const statusResponse = await fetch(
-            `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=status`
-          );
-          const statusData = await statusResponse.json();
-
-          if (statusData.status === 'ready') {
-            clearInterval(pollInterval);
-            setDownloadStatus('ready');
-            setResult(prev => prev ? {
-              ...prev,
-              videoUrl: `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=stream`,
-              videoType: 'direct',
-            } : null);
-          } else if (statusData.status === 'not_found') {
-            // Still downloading, keep waiting
-          }
-        }, 5000);
-      } else {
-        setDownloadStatus('error');
-      }
-    } catch (err) {
-      console.error('Download error:', err);
-      setDownloadStatus('error');
-    }
   };
 
   const handleSendMessage = async () => {
@@ -326,22 +263,14 @@ export default function Home() {
           <div className="left-column">
             <div className="video-container">
               {result.videoType === 'direct' && result.videoUrl ? (
-                <>
-                  <video
-                    controls
-                    autoPlay={false}
-                    className="html5-video"
-                  >
-                    <source src={result.videoUrl} type="video/mp4" />
-                    您的浏览器不支持 HTML5 视频播放
-                  </video>
-                  {videoLoading && (
-                    <div className="video-loading">
-                      <div className="spinner"></div>
-                      <span>加载高清视频中...</span>
-                    </div>
-                  )}
-                </>
+                <video
+                  controls
+                  autoPlay={false}
+                  className="html5-video"
+                >
+                  <source src={result.videoUrl} type="video/mp4" />
+                  您的浏览器不支持 HTML5 视频播放
+                </video>
               ) : (
                 <iframe
                   src={getEmbedUrl(result.url, result.platform, result.videoId)}
@@ -352,28 +281,6 @@ export default function Home() {
                 />
               )}
               <div className="video-controls">
-                <div className="quality-selector">
-                  <span>清晰度:</span>
-                  <select
-                    value={quality}
-                    onChange={(e) => setQuality(e.target.value as any)}
-                    className="quality-select"
-                  >
-                    <option value="auto">自动</option>
-                    <option value="1080">1080P</option>
-                    <option value="720">720P</option>
-                    <option value="480">480P</option>
-                  </select>
-                </div>
-                {downloadStatus === 'ready' ? (
-                  <span className="download-ready">✅ 已下载</span>
-                ) : downloadStatus === 'downloading' ? (
-                  <span className="download-loading">⏬ 下载中...</span>
-                ) : (
-                  <button className="download-btn" onClick={handleDownloadHD}>
-                    ⬇ 下载高清
-                  </button>
-                )}
                 <a
                   href={result.platform === 'youtube'
                     ? `https://www.youtube.com/watch?v=${result.videoId}`
@@ -382,9 +289,8 @@ export default function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="open-original-btn"
-                  style={{ background: '#FB7299', color: 'white', border: '1px solid #FB7299' }}
                 >
-                  🎬 原站
+                  🎬 原站高清
                 </a>
               </div>
             </div>
