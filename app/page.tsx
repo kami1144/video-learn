@@ -276,18 +276,22 @@ export default function Home() {
                     className="quality-select"
                   >
                     <option value="auto">自动</option>
-                    <option value="108">1080P</option>
+                    <option value="1080">1080P</option>
                     <option value="720">720P</option>
                     <option value="480">480P</option>
                   </select>
                 </div>
                 <a
-                  href={result.url}
+                  href={result.platform === 'youtube'
+                    ? `https://www.youtube.com/watch?v=${result.videoId}`
+                    : `https://www.bilibili.com/video/${result.videoId}`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="open-original-btn"
+                  style={{ background: '#FB7299', color: 'white', border: '1px solid #FB7299' }}
                 >
-                  🎬 原站
+                  🎬 高清模式
                 </a>
               </div>
             </div>
