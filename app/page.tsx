@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { extractYouTubeSubtitlesClient } from '@/lib/youtube-client';
 
 interface VideoResult {
   platform: string;
@@ -58,14 +57,15 @@ export default function Home() {
     setMindmap('');
 
     try {
-      // Step 1: Extract subtitles client-side (user's browser → YouTube, no blocking)
-      console.log('Extracting subtitles from YouTube...');
-      const subtitles = await extractYouTubeSubtitlesClient(videoId);
+      // Step 1: Extract subtitles via our API (bypasses CORS)
+      const captionsResponse = await fetch(`/api/captions?videoId=${videoId}&lang=en`);
+      const captionsData = await captionsResponse.json();
 
-      if (subtitles.length === 0) {
-        throw new Error('No subtitles found. The video may not have subtitles available.');
+      if (!captionsResponse.ok || !captionsData.subtitles || captionsData.subtitles.length === 0) {
+        throw new Error(captionsData.error || 'No subtitles found for this video.');
       }
 
+      const subtitles = captionsData.subtitles;
       console.log(`Found ${subtitles.length} subtitle segments`);
 
       // Step 2: Send subtitles to API for LLM processing (summary generation)
