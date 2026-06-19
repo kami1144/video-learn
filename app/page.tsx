@@ -143,6 +143,14 @@ export default function Home() {
     setMindmap('');
   };
 
+  const handleDownload = async () => {
+    if (!result) return;
+    window.open(
+      `/api/video-url?videoId=${encodeURIComponent(result.videoId)}&platform=${result.platform}&action=download`,
+      '_blank'
+    );
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !result) return;
 
@@ -281,17 +289,10 @@ export default function Home() {
                 />
               )}
               <div className="video-controls">
-                <a
-                  href={result.platform === 'youtube'
-                    ? `https://www.youtube.com/watch?v=${result.videoId}`
-                    : `https://www.bilibili.com/video/${result.videoId}`
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="open-original-btn"
-                >
-                  🎬 原站高清
-                </a>
+                <button className="download-btn" onClick={handleDownload}>
+                  ⬇ 下载高清
+                </button>
+
               </div>
             </div>
 
