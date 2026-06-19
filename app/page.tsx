@@ -244,6 +244,14 @@ export default function Home() {
                 allowFullScreen
                 title="Video Player"
               />
+              <a
+                href={result.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="open-original-btn"
+              >
+                🎬 在{result.platform === 'youtube' ? 'YouTube' : 'Bilibili'}打开
+              </a>
             </div>
 
             <div className="summary-section">
@@ -495,6 +503,24 @@ export default function Home() {
           left: 0;
           width: 100%;
           height: 100%;
+        }
+
+        .open-original-btn {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: rgba(0, 0, 0, 0.7);
+          color: white;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 0.8125rem;
+          text-decoration: none;
+          z-index: 10;
+          transition: background 0.2s;
+        }
+
+        .open-original-btn:hover {
+          background: rgba(0, 0, 0, 0.9);
         }
 
         .summary-section, .transcript-section {
