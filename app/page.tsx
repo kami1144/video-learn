@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { extractYouTubeSubtitlesClient } from '@/lib/youtube-client';
 
 interface VideoResult {
   platform: string;
@@ -26,12 +27,13 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [mindmap, setMindmap] = useState('');
 
-  const detectPlatform = (inputUrl: string): string | null => {
-    if (inputUrl.includes('youtube.com') || inputUrl.includes('youtu.be')) {
-      return 'youtube';
-    }
-    if (inputUrl.includes('bilibili.com')) {
-      return 'bilibili';
+  const extractVideoId = (url: string): string | null => {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
     }
     return null;
   };
@@ -43,15 +45,9 @@ export default function Home() {
       return;
     }
 
-    const platform = detectPlatform(url);
-    if (!platform) {
-      setError('请输入 YouTube 或 Bilibili 视频链接');
-      return;
-    }
-
-    // Bilibili 暂时显示提示
-    if (platform === 'bilibili') {
-      setError('Bilibili 字幕功能开发中，请使用 YouTube 链接');
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      setError('请输入 YouTube 视频链接');
       return;
     }
 
@@ -62,10 +58,21 @@ export default function Home() {
     setMindmap('');
 
     try {
+      // Step 1: Extract subtitles client-side (user's browser → YouTube, no blocking)
+      console.log('Extracting subtitles from YouTube...');
+      const subtitles = await extractYouTubeSubtitlesClient(videoId);
+
+      if (subtitles.length === 0) {
+        throw new Error('No subtitles found. The video may not have subtitles available.');
+      }
+
+      console.log(`Found ${subtitles.length} subtitle segments`);
+
+      // Step 2: Send subtitles to API for LLM processing (summary generation)
       const response = await fetch('/api/process-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, videoId, subtitles }),
       });
 
       const data = await response.json();
@@ -74,18 +81,11 @@ export default function Home() {
         throw new Error(data.error || '处理失败');
       }
 
-      // Convert subtitles to expected format
-      const subtitlesWithTime = data.subtitles.map((text: string, index: number) => ({
-        text,
-        startTime: index * 5,
-        endTime: (index + 1) * 5,
-      }));
-
       setResult({
-        platform: data.platform,
+        platform: 'youtube',
         videoId: data.videoId,
         url: data.url,
-        subtitles: subtitlesWithTime,
+        subtitles,
         summary: data.summary,
       });
     } catch (err) {
@@ -158,8 +158,6 @@ export default function Home() {
     }
   };
 
-  const platformLabel = result?.platform === 'youtube' ? 'YouTube' : 'Bilibili';
-
   return (
     <div className="container">
       <header className="header">
@@ -199,7 +197,7 @@ export default function Home() {
       {result && !loading && (
         <div className="result-section">
           <div className="platform-tags">
-            <span className={`platform-tag ${result.platform}`}>{platformLabel}</span>
+            <span className="platform-tag youtube">YouTube</span>
           </div>
 
           <div className="tabs">
@@ -295,7 +293,6 @@ export default function Home() {
 }
 
 function formatMindmap(markdown: string): string {
-  // Simple markdown to HTML conversion for mindmap
   return markdown
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
