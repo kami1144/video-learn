@@ -22,6 +22,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<VideoResult | null>(null);
   const [showInput, setShowInput] = useState(true);
+  const [quality, setQuality] = useState<'auto' | '1080' | '720' | '480'>('auto');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -53,9 +54,14 @@ export default function Home() {
 
   const getEmbedUrl = (url: string, platform: string, videoId: string): string => {
     if (platform === 'youtube') {
-      return `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
+      // YouTube quality params: quality=hd720, hd1080, etc.
+      const qualityParam = quality === 'auto' ? '' : `&vq=${quality}`;
+      return `https://www.youtube.com/embed/${videoId}?enablejsapi=1${qualityParam}`;
     } else if (platform === 'bilibili') {
-      return `https://player.bilibili.com/player.html?bvid=${videoId}&autoplay=0`;
+      // Bilibili quality: 32=360P, 64=480P, 16=720P, 80=1080P
+      const qualityMap: Record<string, string> = { '1080': '80', '720': '16', '480': '64', 'auto': '0' };
+      const qualityParam = quality === 'auto' ? '' : `&quality=${qualityMap[quality] || '0'}`;
+      return `https://player.bilibili.com/player.html?bvid=${videoId}&autoplay=0${qualityParam}`;
     }
     return '';
   };
@@ -261,14 +267,29 @@ export default function Home() {
                 allowFullScreen
                 title="Video Player"
               />
-              <a
-                href={result.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="open-original-btn"
-              >
-                🎬 在{result.platform === 'youtube' ? 'YouTube' : 'Bilibili'}打开
-              </a>
+              <div className="video-controls">
+                <div className="quality-selector">
+                  <span>清晰度:</span>
+                  <select
+                    value={quality}
+                    onChange={(e) => setQuality(e.target.value as any)}
+                    className="quality-select"
+                  >
+                    <option value="auto">自动</option>
+                    <option value="108">1080P</option>
+                    <option value="720">720P</option>
+                    <option value="480">480P</option>
+                  </select>
+                </div>
+                <a
+                  href={result.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="open-original-btn"
+                >
+                  🎬 原站
+                </a>
+              </div>
             </div>
 
             <div className="summary-section">
@@ -560,6 +581,38 @@ export default function Home() {
 
         .open-original-btn:hover {
           background: rgba(0, 0, 0, 0.9);
+        }
+
+        .video-controls {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          display: flex;
+          gap: 8px;
+          z-index: 10;
+        }
+
+        .quality-selector {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(0, 0, 0, 0.7);
+          padding: 4px 8px;
+          border-radius: 6px;
+        }
+
+        .quality-selector span {
+          color: white;
+          font-size: 0.75rem;
+        }
+
+        .quality-select {
+          background: rgba(255, 255, 255, 0.9);
+          border: none;
+          border-radius: 4px;
+          padding: 2px 4px;
+          font-size: 0.75rem;
+          cursor: pointer;
         }
 
         .summary-section, .transcript-section {
