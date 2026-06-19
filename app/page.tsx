@@ -21,6 +21,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<VideoResult | null>(null);
+  const [showInput, setShowInput] = useState(true);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -126,6 +127,14 @@ export default function Home() {
     }
   };
 
+  const handleShowInput = () => {
+    setShowInput(true);
+    setUrl('');
+    setResult(null);
+    setChatMessages([]);
+    setMindmap('');
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !result) return;
 
@@ -224,6 +233,14 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {result && !loading && (
+        <div className="header-actions">
+          <button className="change-video-btn" onClick={handleShowInput}>
+            🔄 切换视频
+          </button>
+        </div>
+      )}
 
       {loading && (
         <div className="loading-state">
@@ -393,9 +410,31 @@ export default function Home() {
           color: #64748b;
         }
 
+        .change-video-btn {
+          display: inline-block;
+          margin-top: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: #f1f5f9;
+          color: #3b82f6;
+          border: 1px solid #3b82f6;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .change-video-btn:hover {
+          background: #3b82f6;
+          color: white;
+        }
+
         .url-input-section {
           max-width: 800px;
           margin: 0 auto 1.5rem;
+        }
+
+        .url-input-section.collapsed {
+          margin-bottom: 0;
         }
 
         .url-input-wrapper {
